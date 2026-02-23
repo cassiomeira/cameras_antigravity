@@ -493,9 +493,12 @@ const __dirname = path.dirname(__filename);
 
 app.use(express.static(path.join(__dirname, '../dist')));
 
-app.get('/*', (req, res) => {
-    if (req.path.startsWith('/db/')) return res.status(404).json({ error: 'Not found' });
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+app.use((req, res, next) => {
+    if (req.method === 'GET') {
+        if (req.path.startsWith('/db/')) return res.status(404).json({ error: 'Not found' });
+        return res.sendFile(path.join(__dirname, '../dist/index.html'));
+    }
+    next();
 });
 
 async function boot() {
