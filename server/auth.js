@@ -11,8 +11,8 @@ import initSqlJS from 'sql.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const MASTER_DB_PATH = join(__dirname, '..', 'master.db');
 const DATA_DIR = join(__dirname, '..', 'data');
+const MASTER_DB_PATH = join(DATA_DIR, 'master.db');
 
 let masterDb = null;
 
