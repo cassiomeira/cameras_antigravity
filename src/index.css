@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #5b21b6;
+  --color-secondary: #7c3aed;
+  --color-accent: #a78bfa;
+}
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-slate-900;
+  }
+}
+
+.sidebar {
+  transition: all 0.3s ease;
+}
+
+.menu-item:hover {
+  @apply bg-blue-100;
+}
+
+.menu-item.active {
+  @apply bg-blue-500 text-white;
+}
+
+.chart-container {
+  position: relative;
+  height: 300px;
+}
