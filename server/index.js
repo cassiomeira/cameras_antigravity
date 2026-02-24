@@ -553,12 +553,14 @@ const __dirname = path.dirname(__filename);
 
 app.use(express.static(path.join(__dirname, '../dist')));
 
-app.use((req, res, next) => {
-    if (req.method === 'GET') {
-        if (req.path.startsWith('/db/')) return res.status(404).json({ error: 'Not found' });
-        return res.sendFile(path.join(__dirname, '../dist/index.html'));
+// FALLBACK: Serve index.html for all non-API GET requests (SPA routing)
+app.get('*', (req, res) => {
+    // Skip if it looks like an API call (already should have been handled or 404'd)
+    if (req.path.startsWith('/db/') || req.path.startsWith('/auth/') || req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'Not found' });
     }
-    next();
+    // Serve index.html from dist
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 async function boot() {

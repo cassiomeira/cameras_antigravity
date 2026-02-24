@@ -227,6 +227,21 @@ export function Settings() {
     const [editando, setEditando] = useState<IXCEmpresa | undefined>(undefined);
     const [sincronizando, setSincronizando] = useState<IXCEmpresa | null>(null);
     const [syncInfo, setSyncInfo] = useState<Record<string, { total: number; data: string }>>({});
+    const [profileData, setProfileData] = useState({
+        company_name: user?.company_name || '',
+        address: user?.address || ''
+    });
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
+    const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    useEffect(() => {
+        if (user) {
+            setProfileData({
+                company_name: user.company_name,
+                address: user.address || ''
+            });
+        }
+    }, [user]);
 
     useEffect(() => {
         // Load empresas from SQLite DB (with localStorage cache as fallback)
@@ -235,6 +250,29 @@ export function Settings() {
             setEmpresaAtivaId(getEmpresaAtiva()?.id ?? null);
         });
     }, []);
+
+    async function handleSaveProfile() {
+        setIsSavingProfile(true);
+        setProfileMessage(null);
+        try {
+            const res = await fetch('/auth/profile', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('camera_erp_token')}`
+                },
+                body: JSON.stringify(profileData)
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Erro ao salvar perfil');
+            setProfileMessage({ type: 'success', text: 'Perfil atualizado com sucesso! Recarregue para aplicar.' });
+            // Optionally reload or update context
+        } catch (err: any) {
+            setProfileMessage({ type: 'error', text: err.message });
+        } finally {
+            setIsSavingProfile(false);
+        }
+    }
 
     async function handleSaveEmpresa(data: Omit<IXCEmpresa, 'id'>) {
         if (editando) {
@@ -304,18 +342,41 @@ export function Settings() {
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Empresa / Nome</label>
-                            <input type="text" defaultValue={user?.company_name || ''} readOnly className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-blue-500 focus:border-blue-500 outline-none bg-gray-50 text-gray-500 cursor-not-allowed" title="Alteração de nome não permitida no momento" />
+                            <input
+                                type="text"
+                                value={profileData.company_name}
+                                onChange={e => setProfileData(p => ({ ...p, company_name: e.target.value }))}
+                                className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-blue-500 focus:border-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Endereço</label>
+                            <textarea
+                                value={profileData.address}
+                                onChange={e => setProfileData(p => ({ ...p, address: e.target.value }))}
+                                rows={3}
+                                className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                                placeholder="Avenida..., Número..., Bairro..., Cidade..."
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Email</label>
-                            <input type="email" defaultValue={user?.email || ''} readOnly className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-blue-500 focus:border-blue-500 outline-none bg-gray-50 text-gray-500 cursor-not-allowed" title="Alteração de email não permitida no momento" />
+                            <input type="email" defaultValue={user?.email || ''} readOnly className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-2 text-sm outline-none bg-gray-50 text-gray-500 cursor-not-allowed" />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Perfil de Acesso</label>
-                            <input type="text" defaultValue={user?.role === 'admin' ? 'Administrador' : 'Empresa'} readOnly className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-2 text-sm outline-none bg-gray-50 text-gray-500 cursor-not-allowed" />
-                        </div>
-                        <button disabled className="bg-gray-100 text-gray-400 px-4 py-2 rounded-lg w-full flex justify-center items-center gap-2 text-sm cursor-not-allowed transition-colors" title="Em breve">
-                            <Save className="w-4 h-4" /> Salvar Alterações
+
+                        {profileMessage && (
+                            <div className={`text-xs p-2 rounded ${profileMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                {profileMessage.text}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleSaveProfile}
+                            disabled={isSavingProfile}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full flex justify-center items-center gap-2 text-sm transition-colors disabled:opacity-50"
+                        >
+                            {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                            Salvar Alterações
                         </button>
                     </div>
                 </div>

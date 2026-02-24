@@ -56,6 +56,7 @@ export async function initMasterDb() {
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             company_name TEXT NOT NULL,
+            address TEXT,
             role TEXT NOT NULL DEFAULT 'user',
             approved INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -84,6 +85,20 @@ export async function initMasterDb() {
     }
 
     persistMaster();
+
+    // Migration: Add address column if it doesn't exist
+    const tableInfo = masterRows("PRAGMA table_info(users)");
+    if (!tableInfo.find(oc => oc.name === 'address')) {
+        masterDb.run("ALTER TABLE users ADD COLUMN address TEXT");
+        console.log('[AUTH] Migration: Added address column to users table');
+
+        // Seed default address for admin
+        masterDb.run(
+            "UPDATE users SET address = ? WHERE email = ?",
+            ['Avenida Januario Ribeiro dos Santos, 904, Centro, Carbonita, MG, CEP 39665-000', 'admin@camera.erp']
+        );
+        persistMaster();
+    }
 }
 
 function persistMaster() {
@@ -112,7 +127,7 @@ export function requireAuth(req, res, next) {
     if (!token) return res.status(401).json({ error: 'Token não fornecido' });
 
     const sessions = masterRows(
-        "SELECT s.user_id, u.id, u.email, u.company_name, u.role, u.approved FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now')",
+        "SELECT s.user_id, u.id, u.email, u.company_name, u.address, u.role, u.approved FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now')",
         [token]
     );
 
@@ -193,6 +208,7 @@ export function mountAuthRoutes(app) {
                 id: user.id,
                 email: user.email,
                 company_name: user.company_name,
+                address: user.address,
                 role: user.role
             }
         });
@@ -204,8 +220,22 @@ export function mountAuthRoutes(app) {
             id: req.user.id,
             email: req.user.email,
             company_name: req.user.company_name,
+            address: req.user.address,
             role: req.user.role
         });
+    });
+
+    // Update Profile
+    app.put('/auth/profile', requireAuth, (req, res) => {
+        const { company_name, address } = req.body;
+        if (!company_name) return res.status(400).json({ error: 'Nome da empresa é obrigatório' });
+
+        masterRun(
+            'UPDATE users SET company_name = ?, address = ? WHERE id = ?',
+            [company_name, address || '', req.user.id]
+        );
+
+        res.json({ ok: true, message: 'Perfil atualizado com sucesso' });
     });
 
     // Logout

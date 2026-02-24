@@ -4,6 +4,7 @@ export interface AuthUser {
     id: number;
     email: string;
     company_name: string;
+    address?: string;
     role: 'admin' | 'user';
 }
 
