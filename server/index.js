@@ -5,6 +5,8 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import http from 'http';
+import https from 'https';
 import { fileURLToPath } from 'url';
 import { initSql, getCompanyDb, persistCompany } from './db.js';
 import { initMasterDb, requireAuth, mountAuthRoutes, mountAdminRoutes } from './auth.js';
@@ -13,6 +15,50 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
+
+// ─── IXC Dynamic Proxy (Productive version of Vite plugin) ────────────────────
+app.use('/api/ixc', (req, res, next) => {
+    const target = req.headers['x-ixc-target'];
+    if (!target) {
+        return res.status(400).json({ error: 'Missing x-ixc-target header' });
+    }
+
+    // Strip empresaId segment from URL path
+    const cleanUrl = req.url.replace(/^\/[^/]+/, '');
+    const fullTargetUrl = `${target.replace(/\/$/, '')}${cleanUrl}`;
+
+    const isHttps = fullTargetUrl.startsWith('https');
+    const lib = isHttps ? https : http;
+    const targetUrl = new URL(fullTargetUrl);
+
+    const options = {
+        hostname: targetUrl.hostname,
+        port: targetUrl.port || (isHttps ? 443 : 80),
+        path: targetUrl.pathname + targetUrl.search,
+        method: req.method,
+        headers: {
+            ...req.headers,
+            host: targetUrl.hostname,
+        },
+    };
+
+    const proxyReq = lib.request(options, (proxyRes) => {
+        const responseHeaders = { ...proxyRes.headers };
+        delete responseHeaders['www-authenticate'];
+        responseHeaders['access-control-allow-origin'] = '*';
+
+        res.writeHead(proxyRes.statusCode || 200, responseHeaders);
+        proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (err) => {
+        console.error('[IXC Proxy Error]', err.message);
+        res.status(502).json({ error: err.message });
+    });
+
+    req.pipe(proxyReq);
+});
+
 app.use(express.json({ limit: '50mb' }));
 
 // ─── Auth routes (public) ─────────────────────────────────────────────────────
