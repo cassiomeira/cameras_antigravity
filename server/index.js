@@ -221,17 +221,31 @@ app.get('/db/clientes/buscar-ixc-id', (req, res) => {
 });
 
 app.post('/db/clientes/sync', (req, res) => {
-    const { empresa_id, registros } = req.body;
-    if (!empresa_id || !Array.isArray(registros)) return res.status(400).json({ error: 'bad' });
+    const { empresa_id, registros, clientes } = req.body;
+    const items = registros || clientes;
+
+    if (!empresa_id || !Array.isArray(items)) {
+        console.error('[SYNC ERROR] Invalid payload:', {
+            has_empresa_id: !!empresa_id,
+            has_items: !!items,
+            is_array: Array.isArray(items),
+            body_keys: Object.keys(req.body || {})
+        });
+        return res.status(400).json({
+            error: 'bad',
+            details: 'Missing empresa_id or registros array (tried "registros" and "clientes" keys)'
+        });
+    }
+
     const now = new Date().toISOString();
-    for (const r of registros) {
+    for (const r of items) {
         run(req,
             `INSERT OR REPLACE INTO clientes_sync (id, empresa_id, razao, fn_cgccpf, fone_celular, fone, email, ativo, cidade, bairro, endereco, numero, tipo_pessoa, valor_mensalidade, sincronizado_em)
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [r.id, empresa_id, r.razao, r.cnpj_cpf || r.fn_cgccpf, r.fone_celular, r.fone, r.email, r.ativo, r.cidade, r.bairro, r.endereco, r.numero, r.tipo_pessoa, r.valor_mensalidade ?? null, now]
         );
     }
-    res.json({ ok: true, count: registros.length });
+    res.json({ ok: true, count: items.length });
 });
 
 app.delete('/db/clientes/sync/:empresa_id', (req, res) => {
