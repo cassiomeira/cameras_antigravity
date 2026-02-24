@@ -135,10 +135,10 @@ export async function dbGetClientes(
     return apiFetch<DBClientesListResult>(`/clientes?${params}`);
 }
 
-export async function dbSyncClientes(empresa_id: string, clientes: object[], overwrite: boolean = false): Promise<{ total: number }> {
+export async function dbSyncClientes(empresa_id: string, registros: object[], overwrite: boolean = false): Promise<{ total: number }> {
     return apiFetch<{ total: number }>('/clientes/sync', {
         method: 'POST',
-        body: JSON.stringify({ empresa_id, clientes, overwrite }),
+        body: JSON.stringify({ empresa_id, registros, overwrite }),
     });
 }
 
