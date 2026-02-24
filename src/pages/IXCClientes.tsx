@@ -134,7 +134,7 @@ function PainelEquipamentos({ data }: { data: { onus: IXCFibraONU[]; radios: IXC
 export function IXCClientes() {
     const navigate = useNavigate();
     const { addClient } = useData();
-    const empresa = getEmpresaAtiva();
+    const [empresa, setEmpresa] = useState<any>(getEmpresaAtiva());
 
     const [query, setQuery] = useState('');
     const [campo, setCampo] = useState<'razao' | 'fn_cgccpf' | 'fone_celular'>('razao');
@@ -144,6 +144,17 @@ export function IXCClientes() {
     const [buscou, setBuscou] = useState(false);
     const [totalDB, setTotalDB] = useState<number | null>(null);
     const [modoAoVivo, setModoAoVivo] = useState(false);
+
+    // Refresh active company from localStorage periodically or when it might have changed
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const current = getEmpresaAtiva();
+            if (current?.id !== empresa?.id) {
+                setEmpresa(current);
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [empresa?.id]);
 
     // Load from DB on startup
     useEffect(() => {

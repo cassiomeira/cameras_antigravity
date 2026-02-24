@@ -31,10 +31,19 @@ export async function loadEmpresasFromDB(): Promise<IXCEmpresa[]> {
         const empresas = await dbGetEmpresas();
         const mapped: IXCEmpresa[] = empresas.map(e => ({ id: e.id, nome: e.nome, url: e.url, token: e.token }));
         localStorage.setItem(STORAGE_KEY_EMPRESAS, JSON.stringify(mapped));
-        const ativa = empresas.find(e => e.ativa === 1);
+
+        let ativa = empresas.find(e => e.ativa === 1);
+
+        // Se não houver nenhuma empresa ativa mas existirem empresas, ativa a primeira automaticamente
+        if (!ativa && empresas.length > 0) {
+            ativa = empresas[0];
+            await dbAtivarEmpresa(ativa.id);
+        }
+
         if (ativa) localStorage.setItem(STORAGE_KEY_ATIVA, ativa.id);
         return mapped;
-    } catch {
+    } catch (err) {
+        console.error('[loadEmpresasFromDB Error]', err);
         // DB server not started yet — fall back to localStorage
         return getEmpresas();
     }
