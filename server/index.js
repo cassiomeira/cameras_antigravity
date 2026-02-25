@@ -183,11 +183,13 @@ app.delete('/db/empresas/:id', (req, res) => {
 // ─── Clientes Sync (IXC) ─────────────────────────────────────────────────────
 
 app.get('/db/clientes', (req, res) => {
-    const empresa = req.query.empresa;
+    // Frontend envia "empresa_id"; manter "empresa" por retrocompatibilidade
+    const empresaId = req.query.empresa_id || req.query.empresa;
     const q = req.query.q || '';
     const rp = Math.min(Number(req.query.rp) || 50, 200);
+
     let sql = 'SELECT * FROM clientes_sync WHERE empresa_id = ?';
-    const params = [empresa];
+    const params = [empresaId];
     if (q) {
         sql += ' AND (razao LIKE ? OR fn_cgccpf LIKE ? OR fone_celular LIKE ? OR fone LIKE ?)';
         const like = `%${q}%`;
@@ -198,7 +200,7 @@ app.get('/db/clientes', (req, res) => {
     const registros = rows(req, sql, params);
 
     let countSql = 'SELECT COUNT(*) as c FROM clientes_sync WHERE empresa_id = ?';
-    const countParams = [empresa];
+    const countParams = [empresaId];
     if (q) {
         countSql += ' AND (razao LIKE ? OR fn_cgccpf LIKE ? OR fone_celular LIKE ? OR fone LIKE ?)';
         const like2 = `%${q}%`;
