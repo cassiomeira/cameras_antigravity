@@ -42,6 +42,7 @@ export function Estoque() {
     const [editingLote, setEditingLote] = useState<DBEstoqueProduto | null>(null);
     const [editingRastreado, setEditingRastreado] = useState<DBEquipamento | null>(null);
     const [provideTarget, setProvideTarget] = useState<DBEstoqueProduto | null>(null);
+    const [provideRastreadoTarget, setProvideRastreadoTarget] = useState<DBEquipamento | null>(null);
     const [historyTarget, setHistoryTarget] = useState<DBEquipamento | null>(null);
     const [historyLogs, setHistoryLogs] = useState<DBEquipamentoHistorico[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
@@ -49,6 +50,7 @@ export function Estoque() {
     const [formLote, setFormLote] = useState({ categoria: 'Roteadores', modelo: '', estoque_minimo: 5, quantidade: 0, valor_total: '' });
     const [formRastreado, setFormRastreado] = useState({ categoria: 'Roteadores', modelo: '', serial_number: '', mac: '', status: 'Em Estoque', preco_custo: '', observacao: '' });
     const [formProvide, setFormProvide] = useState({ clientId: '', sn: '', mac: '', observacao: '', quantidade: 1, valor_mensal: '' });
+    const [formProvideRastreado, setFormProvideRastreado] = useState({ clientId: '', valor_mensal: '', observacao: '' });
 
     // --- Entrada de Estoque (Compras) ---
     const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
@@ -220,7 +222,7 @@ export function Estoque() {
         }
     };
 
-    // --- Provide to Client ---
+    // --- Provide to Client (a partir de LOTES) ---
     const openProvideModal = (lote: DBEstoqueProduto) => {
         setProvideTarget(lote);
         setFormProvide({ clientId: '', sn: '', mac: '', observacao: '', quantidade: 1, valor_mensal: '' });
@@ -276,6 +278,48 @@ export function Estoque() {
             loadData();
         } else {
             alert(`Sem estoque suficiente! Disponível: ${provideTarget.quantidade}, Solicitado: ${qty}`);
+        }
+    };
+
+    // --- Provide to Client (a partir de um equipamento RASTREADO que voltou ao estoque) ---
+    const openProvideFromRastreado = (item: DBEquipamento) => {
+        setProvideRastreadoTarget(item);
+        setFormProvideRastreado({
+            clientId: '',
+            valor_mensal: item.valor_mensal || '',
+            observacao: ''
+        });
+    };
+
+    const handleProvideRastreadoSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!provideRastreadoTarget || !formProvideRastreado.clientId) return;
+
+        const client = clients.find(c => c.id === Number(formProvideRastreado.clientId));
+        if (!client) return;
+
+        try {
+            await dbUpdateEquipamento(provideRastreadoTarget.id, {
+                ...provideRastreadoTarget,
+                status: 'No Cliente',
+                ixc_cliente_id: String(client.id),
+                ixc_cliente_nome: client.name,
+                valor_mensal: formProvideRastreado.valor_mensal || provideRastreadoTarget.valor_mensal || ''
+            });
+
+            await dbAddEquipamentoHistorico(provideRastreadoTarget.id, {
+                acao: 'Fornecido ao Cliente (Reuso)',
+                cliente_id: String(client.id),
+                cliente_nome: client.name,
+                observacao: formProvideRastreado.observacao || 'Equipamento reaproveitado de estoque rastreado'
+            });
+
+            setProvideRastreadoTarget(null);
+            setFormProvideRastreado({ clientId: '', valor_mensal: '', observacao: '' });
+            loadData();
+        } catch (error) {
+            console.error('Falha ao fornecer equipamento rastreado:', error);
+            alert('Falha ao fornecer equipamento rastreado. Verifique o console.');
         }
     };
 
@@ -533,13 +577,22 @@ export function Estoque() {
                                                         <span className="text-gray-400">Na base</span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 text-right whitespace-nowrap">
-                                                    <button onClick={() => openHistory(item)} className="text-blue-600 hover:text-blue-800 mr-3" title="Ver Histórico">
+                                                <td className="px-6 py-4 text-right whitespace-nowrap space-x-2">
+                                                    <button onClick={() => openHistory(item)} className="text-blue-600 hover:text-blue-800" title="Ver Histórico">
                                                         <History className="w-4 h-4 inline" />
                                                     </button>
-                                                    <button onClick={() => openEditRastreado(item)} className="text-primary hover:text-primary/70 mr-3" title="Editar">
+                                                    <button onClick={() => openEditRastreado(item)} className="text-primary hover:text-primary/70" title="Editar">
                                                         <Edit className="w-4 h-4 inline" />
                                                     </button>
+                                                    {item.status === 'Em Estoque' && (
+                                                        <button
+                                                            onClick={() => openProvideFromRastreado(item)}
+                                                            className="text-green-600 hover:text-green-800 font-medium bg-green-50 px-2 py-1 rounded-md text-xs"
+                                                            title="Fornecer este equipamento para um cliente"
+                                                        >
+                                                            Fornecer
+                                                        </button>
+                                                    )}
                                                     <button onClick={() => handleDeleteRastreado(item.id)} className="text-red-600 hover:text-red-900" title="Excluir">
                                                         <Trash className="w-4 h-4 inline" />
                                                     </button>
@@ -869,6 +922,125 @@ export function Estoque() {
                             <button type="button" onClick={() => setIsProvideModalOpen(false)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Cancelar</button>
                             <button type="submit" disabled={provideTarget.quantidade < formProvide.quantidade} className="px-6 py-2 text-sm text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors disabled:opacity-50">
                                 Confirmar Saída ({formProvide.quantidade} un.)
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
+
+            {/* Modal FORNECER RASTREADO AO CLIENTE */}
+            <Modal isOpen={!!provideRastreadoTarget} onClose={() => setProvideRastreadoTarget(null)} title="Fornecer Equipamento Rastreado ao Cliente">
+                {provideRastreadoTarget && (
+                    <form onSubmit={handleProvideRastreadoSubmit} className="space-y-4">
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-semibold text-blue-800">{provideRastreadoTarget.modelo}</p>
+                                <p className="text-xs text-blue-600">{provideRastreadoTarget.categoria}</p>
+                            </div>
+                            <div className="text-right text-xs text-blue-700 font-mono space-y-0.5">
+                                <div>S/N: {provideRastreadoTarget.serial_number || '—'}</div>
+                                <div>MAC: {provideRastreadoTarget.mac || '—'}</div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Selecione o Cliente</label>
+                            {formProvideRastreado.clientId ? (
+                                <div className="mt-1 flex items-center gap-2">
+                                    <span className="inline-flex items-center px-3 py-2 rounded-md bg-green-100 text-green-800 font-medium text-sm flex-1">
+                                        ✅ {clients.find(c => c.id === Number(formProvideRastreado.clientId))?.name || 'Cliente'}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormProvideRastreado({ ...formProvideRastreado, clientId: '' })}
+                                        className="text-red-500 hover:text-red-700 text-sm px-2 py-1 bg-red-50 rounded"
+                                        title="Trocar cliente"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="mt-1 relative">
+                                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10" />
+                                    <input
+                                        type="text"
+                                        placeholder="Digite para buscar o cliente..."
+                                        title="Buscar cliente"
+                                        id="provide-rastreado-client-search"
+                                        autoComplete="off"
+                                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-md w-full text-sm focus:ring-primary focus:border-primary"
+                                        onChange={e => {
+                                            const el = document.getElementById('provide-rastreado-client-list');
+                                            if (el) el.dataset.filter = e.target.value.toLowerCase();
+                                            el?.querySelectorAll('[data-name]').forEach((li: any) => {
+                                                li.style.display = li.dataset.name.includes(e.target.value.toLowerCase()) ? '' : 'none';
+                                            });
+                                        }}
+                                    />
+                                    <ul
+                                        id="provide-rastreado-client-list"
+                                        className="border border-gray-200 rounded-md max-h-40 overflow-y-auto mt-1 bg-white shadow-sm"
+                                    >
+                                        {clients.map(c => (
+                                            <li
+                                                key={c.id}
+                                                data-name={c.name.toLowerCase()}
+                                                onClick={() => setFormProvideRastreado({ ...formProvideRastreado, clientId: String(c.id) })}
+                                                className="px-3 py-2 text-sm hover:bg-primary/10 cursor-pointer border-b border-gray-50 last:border-0"
+                                            >
+                                                <span className="font-medium">{c.name}</span>
+                                                {c.document && <span className="text-gray-400 text-xs ml-2">{c.document}</span>}
+                                            </li>
+                                        ))}
+                                        {clients.length === 0 && (
+                                            <li className="px-3 py-2 text-sm text-gray-400">Nenhum cliente cadastrado.</li>
+                                        )}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Valor Mensal (R$)</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    title="Valor mensal deste equipamento"
+                                    placeholder="Ex: 20.00"
+                                    value={formProvideRastreado.valor_mensal}
+                                    onChange={e => setFormProvideRastreado({ ...formProvideRastreado, valor_mensal: e.target.value })}
+                                    className="mt-1 block w-full rounded-md border-gray-300 border p-2"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Observações de Comodato/Venda</label>
+                            <input
+                                title="Observações"
+                                value={formProvideRastreado.observacao}
+                                onChange={e => setFormProvideRastreado({ ...formProvideRastreado, observacao: e.target.value })}
+                                placeholder="Ex: Equipamento reaproveitado"
+                                className="mt-1 block w-full rounded-md border-gray-300 border p-2"
+                            />
+                        </div>
+
+                        <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+                            <button
+                                type="button"
+                                onClick={() => setProvideRastreadoTarget(null)}
+                                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={!formProvideRastreado.clientId}
+                                className="px-6 py-2 text-sm text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors disabled:opacity-50"
+                            >
+                                Confirmar Fornecimento
                             </button>
                         </div>
                     </form>
